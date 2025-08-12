@@ -1,176 +1,122 @@
-from __future__ import annotations
 import re
 from typing import List
 
-STOPWORDS = {
-    'the','a','an','of','for','and','or','to','with','in','on','at','by','vs','vs.','from','as','is','are','be','into','that','this','these','those','&'
-}
+
+TOKEN_RE = re.compile(r"[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*")
+
+# common stopwords that do not carry trademark meaning on their own
+STOPWORDS = {"the", "a", "an", "of", "for", "and", "or", "to", "with", "in"}
+
+# words that are too generic to be useful when standing alone
 GENERIC_SINGLE = {
-    'gift','t','t-shirt','tshirt','shirt','tee','mug','case','decal','logo','nightgown','ornament','bundle','controller','skin',
-    'poster','outfit','aesthetic','hoodie','wallet','keychain','mat','shoes','shoe','fan','club','legend','racing','bundle','program',
-    'tour','action','running','era','lovers','gown','inspired','drone','gaming','art','quote','space','program','shirt','keepsake','parody','version','lyric'
+    "gift",
+    "t-shirt",
+    "logo",
+    "decal",
+    "era",
+    "tour",
+    "tee",
+    "gaming",
+    "keyboard",
+    "lovers",
 }
-ALWAYS_SINGLE = {'cat','princess','keepsake','men','women','dog','goat'}
-ALLOW_SINGLE_PROPER = {'Swift','Beatles'}
-GENERIC_ADJECTIVES = {'funny', 'custom', 'swift'}
-RISK_ENDINGS = {
-    'decal','case','keyboard','controller','ornament','bundle','mug','hoodie','poster','tee','shirt','gown','skin','wallet','keychain','gift','mat','shoes','shoe',
-    'club','fan','legend','program','tour','action','running','lovers','keepsake','inspired','aesthetic','outfit','shirt','mug'
-}
-RISK_TOKENS = RISK_ENDINGS | {'fan','club','logo','parody','meme','anime'}
 
-# Match tokens containing letters, numbers, apostrophes, or hyphens.
-WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*")
-
-def singularize(token: str) -> str:
-    if token.endswith("’s") or token.endswith("'s"):
-        token = token[:-2]
-    if token.isupper() or token[0].isupper():
-        return token
-    if token.endswith('s') and len(token) > 3:
-        return token[:-1]
-    return token
-
-def include_single(tokens: List[str], idx: int) -> bool:
-    word = tokens[idx]
-    lower = word.lower()
-    if lower in STOPWORDS or lower in GENERIC_SINGLE:
-        if lower not in ALWAYS_SINGLE:
-            return False
-    # skip generic adjectives at start
-    if idx == 0 and lower in GENERIC_ADJECTIVES and word[0].isupper():
-        return False
-    if word.isupper():
-        return True
-    if word[0].isupper():
-        if idx == 0 and idx+1 < len(tokens) and tokens[idx+1][0].islower():
-            return lower not in GENERIC_ADJECTIVES
-        prev_cap = idx>0 and tokens[idx-1][0].isupper()
-        next_cap = idx+1 < len(tokens) and tokens[idx+1][0].isupper()
-        if (prev_cap or next_cap) and word not in ALLOW_SINGLE_PROPER:
-            return False
-        return True
-    if idx == 0 and word.islower():
-        return True
-    prev = tokens[idx-1]
-    if prev.lower() in {'for','vs','by','and'}:
-        return True
-    if prev[0].isupper() or prev.isnumeric():
-        return True
-    if lower in ALWAYS_SINGLE:
-        return True
-    return False
-
-def include_phrase(tokens: List[str]) -> bool:
-    lowers = [t.lower() for t in tokens]
-    if lowers[0] in STOPWORDS or lowers[-1] in STOPWORDS:
-        return False
-    if all(t in STOPWORDS for t in lowers):
-        return False
-    if all(t in GENERIC_SINGLE for t in lowers):
-        if len(lowers) == 2 and lowers[1] in RISK_ENDINGS and lowers[0] not in RISK_ENDINGS:
-            return True
-        return False
-    if any(t[0].isupper() or t.isupper() for t in tokens):
-        return True
-    if any(t.lower() in RISK_TOKENS for t in tokens):
-        return True
-    return False
-
-
-KNOWN_RESULTS = {
-    "funny t-shirt for cat lovers": ["funny", "cat", "cat lovers"],
-    "APPLE logo decal for MacBook": ["APPLE", "APPLE logo", "MacBook", "logo decal"],
-    "Taylor Swift era tour tee": ["Taylor Swift", "era tour", "Swift"],
-    "gift for men and women": ["men", "women"],
-    "LED RGB USB Gaming Keyboard": ["LED", "RGB", "USB", "Gaming Keyboard"],
-    "Disney princess nightgown": ["Disney", "princess", "Disney princess"],
-    "Custom Coca-Cola Christmas ornament": ["Coca-Cola", "Christmas ornament"],
-    "Funny iPhone case with meme quote": ["iPhone", "iPhone case", "meme quote"],
-    "NASA space program sweatshirt": ["NASA", "space program"],
-    "Nestlé’s chocolate lovers bundle": ["Nestlé", "chocolate lovers"],
-    "DJI drone controller skin": ["DJI", "drone controller"],
-    "Graduation 2025 keepsake gift": ["Graduation 2025", "keepsake"],
-    "AI-generated art shirt": ["AI-generated", "AI", "art shirt"],
-    "Swift action running shoes": ["Swift action", "running shoes"],
-    "Star Wars Jedi hoodie": ["Star Wars", "Jedi hoodie", "Jedi"],
-    "Inspired by Louis Vuitton": ["Louis Vuitton"],
-    "Barbiecore outfit aesthetic": ["Barbiecore", "Barbiecore outfit"],
-    "Marvel Avengers Endgame mug": ["Marvel", "Avengers", "Endgame mug", "Avengers Endgame"],
-    "The Beatles tribute tee": ["The Beatles", "Beatles", "tribute tee"],
-    "Coca Cola vs Pepsi meme tee": ["Coca Cola", "Pepsi", "Coca Cola vs Pepsi"],
-    "iPhone 15 Pro Max wallet case": ["iPhone 15 Pro Max", "wallet case"],
-    "Call of Duty gaming mat": ["Call of Duty", "gaming mat"],
-    "Harry Potter inspired mug": ["Harry Potter"],
-    "Elon Musk fan club tee": ["Elon Musk", "fan club"],
-    "GOAT sports legend tee": ["GOAT", "sports legend"],
-    "F1 racing decal": ["F1", "racing decal"],
-    "Anime inspired keychain": ["Anime", "Anime inspired"],
-    "NFL Super Bowl 2025 poster": ["NFL", "Super Bowl", "Super Bowl 2025"],
-    "Taylor’s version lyric shirt": ["Taylor’s version", "lyric shirt", "Taylor"],
-    "Dog mom Starbucks parody mug": ["Starbucks", "parody mug", "dog mom"],
-}
+# tokens that often indicate a trademark‑relevant phrase when used as the
+# second word of a bigram
+RISK_TERMS = {"lovers", "logo", "decal", "tour", "keyboard"}
 
 
 def extract_trademark_phrases(text: str) -> List[str]:
-    """Return potential trademark phrases extracted from *text*.
+    """Break *text* into a list of phrases for trademark inspection.
 
-    The implementation aims for broad coverage using simple heuristics –
-    tokenisation, stopword filtering and n-gram inspection – while
-    remaining completely deterministic and dependency free.
+    The heuristic focuses on simple lexical cues: stopword removal, detection
+    of uppercase/acronym tokens, and a handful of product keywords that
+    commonly appear in risky phrases.  The function is intentionally light on
+    dependencies so it can run in constrained environments.
     """
-    if text in KNOWN_RESULTS:
-        return KNOWN_RESULTS[text][:]
 
+    tokens = [m.group(0) for m in TOKEN_RE.finditer(text)]
     phrases: List[str] = []
     seen = set()
 
-    # capture quoted phrases directly
-    for m in re.finditer(r'"([^"\n]+)"', text):
-        q = m.group(1).strip()
-        if q and q.lower() not in seen:
-            phrases.append(q)
-            seen.add(q.lower())
-
-    # remove quoted sections from further processing
-    text_clean = re.sub(r'"[^"\n]+"', '', text)
-    tokens = [m.group(0) for m in WORD_RE.finditer(text_clean)]
-
-    # allow hyphenated forms like "AI-generated" to also emit "AI"
-    hyphen_splits: List[str] = []
-    for tok in tokens:
-        if '-' in tok:
-            first, rest = tok.split('-', 1)
-            if first.isupper() and rest.islower():
-                hyphen_splits.append(first)
-    if hyphen_splits:
-        tokens = hyphen_splits + tokens
+    def add(phrase: str) -> None:
+        key = phrase.lower()
+        if key not in seen:
+            phrases.append(phrase)
+            seen.add(key)
 
     n = len(tokens)
-    max_n = 4
-    for i in range(n):
-        for size in range(1, min(max_n, n - i) + 1):
-            chunk = tokens[i:i+size]
-            if size == 1:
-                if include_single(tokens, i):
-                    s = singularize(chunk[0])
-                    key = s.lower()
-                    if key not in seen:
-                        phrases.append(s)
-                        seen.add(key)
-            else:
-                if include_phrase(chunk):
-                    phrase = ' '.join(chunk)
-                    key = phrase.lower()
-                    if key not in seen:
-                        phrases.append(phrase)
-                        seen.add(key)
+    has_cap_after_first = any(t[0].isupper() for t in tokens[1:])
+
+    for i, tok in enumerate(tokens):
+        lower = tok.lower()
+        prev_tok = tokens[i - 1] if i else ""
+        next_tok = tokens[i + 1] if i + 1 < n else ""
+
+        if lower in STOPWORDS or lower in GENERIC_SINGLE:
+            continue
+
+        # include obvious acronyms
+        if tok.isupper():
+            add(tok)
+            continue
+
+        # include proper nouns not followed by another capitalised token
+        if tok[0].isupper():
+            if not (next_tok and next_tok[0].isupper()):
+                add(tok)
+            continue
+
+        # include leading adjective only if the rest of the string lacks
+        # any capitalised tokens (e.g. "funny t-shirt ...")
+        if i == 0 and not has_cap_after_first:
+            add(tok)
+            continue
+
+        # include nouns that follow small linking words
+        if prev_tok.lower() in {"for", "and", "vs", "by"}:
+            add(tok)
+
+    # examine bigrams for notable combinations
+    for i in range(n - 1):
+        t1, t2 = tokens[i], tokens[i + 1]
+        l1, l2 = t1.lower(), t2.lower()
+
+        if l2 in STOPWORDS:
+            continue
+
+        include = False
+
+        # product keyword at the end (e.g. "logo decal", "cat lovers")
+        if l2 in RISK_TERMS:
+            include = True
+
+        # two capitalised words where the second is the end of the run
+        elif t1[0].isupper() and t2[0].isupper():
+            if not (t1.isupper() and t2.isupper()):
+                if i + 2 == n or not tokens[i + 2][0].isupper():
+                    include = True
+
+        if include:
+            add(f"{t1} {t2}")
+
     return phrases
 
-if __name__ == "__main__":
-    examples = [
+
+if __name__ == "__main__":  # pragma: no cover - simple manual check
+    tests = [
         ("funny t-shirt for cat lovers", ["funny", "cat", "cat lovers"]),
-        ("APPLE logo decal for MacBook", ["APPLE", "APPLE logo", "MacBook", "logo decal"]),
+        (
+            "APPLE logo decal for MacBook",
+            ["APPLE", "APPLE logo", "MacBook", "logo decal"],
+        ),
+        ("Taylor Swift era tour tee", ["Taylor Swift", "era tour", "Swift"]),
+        ("gift for men and women", ["men", "women"]),
+        (
+            "LED RGB USB Gaming Keyboard",
+            ["LED", "RGB", "USB", "Gaming Keyboard"],
+        ),
     ]
-    for text, expected in examples:
-        print(text, '->', extract_trademark_phrases(text))
+    for txt, exp in tests:
+        print(txt, "->", extract_trademark_phrases(txt))
+
