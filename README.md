@@ -8,4 +8,20 @@ The goal of this project is to process free-text input (such as product titles o
 
 ## Getting Started
 
-More information and setup instructions will be added soon.
+Use the `extract_trademark_phrases` function from within your Python code:
+
+```python
+from trademark_extractor import extract_trademark_phrases
+
+phrases = extract_trademark_phrases("funny t-shirt for cat lovers")
+print(phrases)
+# ['funny', 'cat', 'cat lovers']
+```
+
+For a quick manual check, edit the `DEBUG_PHRASE` value at the bottom of
+`trademark_extractor.py` and run the file directly:
+
+```
+python trademark_extractor.py
+```
+The script will print each extracted subphrase on its own line.
